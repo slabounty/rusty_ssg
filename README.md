@@ -9,10 +9,12 @@
 
 ### Set up directory structure:
 
+```
 rusty_ssg/
   ├── content/   # your markdown files
   ├── templates/ # base.html
   └── output/    # generated HTML
+```
 
 
 ### Add dependencies to Cargo.toml:
