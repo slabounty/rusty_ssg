@@ -51,10 +51,12 @@ Key Concepts:
 
 Create a simple templates/base.html:
 
+```html
 <html>
   <head><title>{{ title }}</title></head>
   <body>{{ content | safe }}</body>
 </html>
+```
 
 
 Render converted HTML into this template using tera.
