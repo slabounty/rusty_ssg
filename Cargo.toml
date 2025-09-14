@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-walkdir = "2.5"
+anyhow = "1.0"
 pulldown-cmark = "0.13"
 tera = "1.20"
-anyhow = "1.0"
+walkdir = "2.5"
 
