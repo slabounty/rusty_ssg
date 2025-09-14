@@ -60,13 +60,15 @@ fn convert_md_text_to_html(markdown_text: &str, template_dir: &str) {
     // Print or save the HTML output
     println!("HTML output =\n{}", html_output);
 
-    let base_html = String::from("base.html");
-    let tera = Tera::new(template_dir).unwrap();
+    let base_html = String::from("base.html"); // The template we'll use
+    let tera = Tera::new(template_dir).unwrap(); // Let tera know where the templates are
 
+    // Create a context and add the data into it.
     let mut context = Context::new();
-    context.insert("title", "The Title"); // Insert the generated HTML content
-    context.insert("content", &html_output); // Insert the generated HTML content
+    context.insert("title", "The Title"); // Insert the title (in the base.html this is {{ title }})
+    context.insert("content", &html_output); // Insert the generated HTML content (in the base.html this is {{ content }})
 
+    // Render the html from the template and the context
     let rendered_html = tera.render(&base_html, &context).unwrap();
     println!("Rendered html = \n {}", rendered_html);
 }
