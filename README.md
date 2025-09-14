@@ -33,7 +33,7 @@ Write code to:
 - Filter for .md files.
 - Print the list of discovered files.
 
-Key Concepts:
+### Key Concepts:
 
 - Iterators
 - Result handling (? operator)
@@ -44,7 +44,7 @@ Key Concepts:
 - Pick a single .md file and convert it to HTML using pulldown-cmark.
 - Output raw HTML to the terminal for testing.
 
-Key Concepts:
+### Key Concepts:
 
 - Using external crates
 - Reading file contents (std::fs::read_to_string)
@@ -63,7 +63,7 @@ Create a simple templates/base.html:
 
 Render converted HTML into this template using tera.
 
-Key Concepts:
+### Key Concepts:
 
 - Templating with tera
 - Structuring code with functions
@@ -72,7 +72,7 @@ Key Concepts:
 
 Write generated HTML to output/ directory, preserving file names (example.md → example.html).
 
-Key Concepts:
+### Key Concepts:
 
 - Creating directories if they don’t exist (std::fs::create_dir_all)
 - File writing (std::fs::write)
@@ -83,7 +83,7 @@ Key Concepts:
 - For each: convert → template → write.
 - Log each file processed.
 
-Key Concepts:
+### Key Concepts:
 
 - Iterators (for entry in ...)
 - Handling multiple Results (collect::<Result<_,_>>()? or loops with ?)
