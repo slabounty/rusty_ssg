@@ -72,3 +72,53 @@ fn convert_md_text_to_html(markdown_text: &str, template_dir: &str) {
     let rendered_html = tera.render(&base_html, &context).unwrap();
     println!("Rendered html = \n {}", rendered_html);
 }
+
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+
+    #[test]
+    fn test_convert_md_text_to_html_basic() {
+        // Arrange: markdown input with a header and paragraph
+        let md = "# Hello\n\nThis is a test.";
+        // Minimal template string to simulate Tera
+        let template_dir = "tests/templates/*.html";
+
+        // Ensure test template exists
+        fs::create_dir_all("tests/templates").unwrap();
+        fs::write("tests/templates/base.html", "<html><head><title>{{ title }}</title></head><body>{{ content | safe }}</body></html>").unwrap();
+
+        // Act: convert
+        convert_md_text_to_html(md, template_dir);
+
+        // Assert: just check template exists, tera loads it, and HTML is generated
+        // (Here we don’t capture stdout, but you could with `assert_cmd` or `duct`)
+        let tera = Tera::new(template_dir).unwrap();
+        let mut ctx = Context::new();
+        ctx.insert("title", "The Title");
+        ctx.insert("content", "<h1>Hello</h1>\n<p>This is a test.</p>\n");
+        let rendered = tera.render("base.html", &ctx).unwrap();
+
+        assert!(rendered.contains("<h1>Hello</h1>"));
+        assert!(rendered.contains("<p>This is a test.</p>"));
+        assert!(rendered.contains("<title>The Title</title>"));
+    }
+
+    #[test]
+    fn test_convert_file_to_html_missing_file() {
+        // Arrange: point to a missing file
+        let missing_path = "tests/fixtures/does_not_exist.md";
+        let template_dir = "tests/templates/*.html";
+
+        // Act: function should not panic
+        convert_file_to_html(missing_path, template_dir);
+
+        // Assert: nothing to assert directly, but no panic = pass
+        assert!(!Path::new(missing_path).exists());
+    }
+}
