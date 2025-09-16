@@ -1,6 +1,8 @@
 use std::fs;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use log::{info};
+use env_logger::Env;
 use pulldown_cmark::{Parser, Options, html};
 use tera::{Tera, Context};
 use walkdir::WalkDir;
@@ -13,7 +15,10 @@ struct SitePaths {
 }
 
 fn main() {
-    println!("Rusty Static Site Generator");
+    // Initialize the logger based on the `RUST_LOG` environment variable.
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
+    info!("Rusty Static Site Generator");
 
     let site_paths = SitePaths {
         content_path: String::from("./content"),
@@ -50,6 +55,7 @@ fn convert_file_to_html(site_paths: &SitePaths, md_file_path: &str) {
 }
 
 fn convert_md_text_to_html(site_paths: &SitePaths, md_file_path: &str, markdown_text: &str) {
+    info!("Processing: {}", md_file_path);
 
     // Set up options (e.g., enable tables, footnotes, etc.)
     let mut options = Options::empty();
@@ -76,6 +82,7 @@ fn convert_md_text_to_html(site_paths: &SitePaths, md_file_path: &str, markdown_
     let output_file = output_html_path(md_file_path, &site_paths.output_path);
 
     // Create the output directory if it doesn't exist and write the file.
+    info!("Writing output: {}", output_file.display());
     fs::create_dir_all(&site_paths.output_path).unwrap();
     fs::write(output_file, rendered_html).unwrap();
 }
