@@ -1,2 +1,4 @@
 /target
 /tests/templates
+/tests/output
+/output
