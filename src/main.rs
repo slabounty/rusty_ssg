@@ -1,11 +1,24 @@
 use std::fs;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use clap::{Parser as ClapParser};
 use log::{info};
 use env_logger::Env;
 use pulldown_cmark::{Parser, Options, html};
 use tera::{Tera, Context};
 use walkdir::WalkDir;
+
+#[derive(ClapParser)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// Sets a custom config file
+    #[arg(short, long, value_name = "FILE")]
+    content: Option<String>,
+
+    /// Sets a custom config file
+    #[arg(short, long, value_name = "FILE")]
+    output: Option<String>,
+}
 
 struct SitePaths {
     content_path: String,
@@ -20,10 +33,12 @@ fn main() {
 
     info!("Rusty Static Site Generator");
 
+    let cli = Cli::parse();
+
     let site_paths = SitePaths {
-        content_path: String::from("./content"),
+        content_path: cli.content.unwrap_or_else(|| String::from("./content")),
         template_path: String::from("./templates/*.html"),
-        output_path: String::from("./output"),
+        output_path: cli.output.unwrap_or_else(|| String::from("./output")),
         base_template: String::from("base.html"),
     };
 
@@ -104,6 +119,8 @@ mod tests {
     use super::*;
     use std::fs;
     use std::path::Path;
+    use super::Cli;
+    use clap::Parser;
 
     #[test]
     fn test_convert_md_text_to_html_basic() {
@@ -167,5 +184,24 @@ mod tests {
         let result = output_html_path(md, out);
 
         assert_eq!(result, PathBuf::from("./output/hello.html"));
+    }
+
+
+    #[test]
+    fn test_with_arguments() {
+        let args = ["test", "--content", "./my_content", "--output", "./my_output"];
+        let cli = Cli::parse_from(&args);
+
+        assert_eq!(cli.content, Some("./my_content".to_string()));
+        assert_eq!(cli.output, Some("./my_output".to_string()));
+    }
+
+    #[test]
+    fn test_with_defaults() {
+        let args = ["test"]; // no flags
+        let cli = Cli::parse_from(&args);
+
+        assert_eq!(cli.content, None);
+        assert_eq!(cli.output, None);
     }
 }
