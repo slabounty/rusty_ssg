@@ -1,6 +1,8 @@
 use std::fs;
 use std::ffi::OsStr;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+
 use clap::{Parser as ClapParser};
 use log::{info};
 use env_logger::Env;
@@ -84,30 +86,72 @@ fn convert_md_text_to_html(site_paths: &SitePaths, md_file_path: &str, markdown_
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
 
-    let tera = Tera::new(&site_paths.template_path).unwrap(); // Let tera know where the templates are
-
-    // Create a context and add the data into it.
-    let mut context = Context::new();
-    context.insert("title", "The Title"); // Insert the title (in the base.html this is {{ title }})
-    context.insert("content", &html_output); // Insert the generated HTML content (in the base.html this is {{ content }})
-
-    // Render the html from the template and the context
-    let rendered_html = tera.render(&site_paths.base_template, &context).unwrap();
+    let rendered_html = match render_page(&site_paths, &html_output) {
+        Ok(html) => html,
+        Err(e) => {
+            panic!("Error rendering template: {}", e);
+        },
+    };
 
     let output_file = output_html_path(md_file_path, &site_paths.output_path);
 
     // Create the output directory if it doesn't exist and write the file.
     info!("Writing output: {}", output_file.display());
-    fs::create_dir_all(&site_paths.output_path).unwrap();
-    fs::write(output_file, rendered_html).unwrap();
+    if let Err(e) = create_and_write_file(&output_file, &rendered_html) {
+        eprintln!("Operation failed: {}", e);
+    }
+}
+
+// The function must return a Result to use the '?' operator.
+fn render_page(site_paths: &SitePaths, html_output: &str) -> Result<String, tera::Error> {
+    let tera = Tera::new(&site_paths.template_path)?;
+
+    // Create a context and add the data into it.
+    let mut context = Context::new();
+    context.insert("title", "The Title");
+    context.insert("content", &html_output);
+
+    // Render the html from the template and the context.
+    let rendered_html = tera.render(&site_paths.base_template, &context)?;
+
+    Ok(rendered_html)
+}
+
+fn create_and_write_file(path: &Path, content: &str) -> io::Result<()> {
+    // Create parent directories if they don't exist
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?; // The '?' operator propagates errors
+    }
+
+    match fs::File::create(path) {
+        Ok(mut file) => {
+            match file.write_all(content.as_bytes()) {
+                Ok(_) => {
+                    info!("Successfully wrote to file: {:?}", path);
+                    Ok(())
+                }
+                Err(e) => {
+                    eprintln!("Error writing to file {:?}: {}", path, e);
+                    Err(e)
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Error creating file {:?}: {}", path, e);
+            Err(e)
+        }
+    }
 }
 
 fn output_html_path(md_path: &str, output_dir: &str) -> PathBuf {
     let md_path = Path::new(md_path);
     let output_dir = Path::new(output_dir);
 
-    // Get just the filename ("hello.md")
-    let filename = md_path.file_stem().unwrap();
+    // Get just the filename ("hello.md"). Since we got the md_path from reading it,
+    // this really shouldn't ever happen. If it does, just exit with the error message.
+    let filename = md_path.file_stem().unwrap_or_else( || {
+        panic!("Path has no file stem: {:?}", md_path);
+    });
 
     // Build new path: output_dir + "hello.html"
     output_dir.join(format!("{}.html", filename.to_string_lossy()))
@@ -121,6 +165,7 @@ mod tests {
     use std::path::Path;
     use super::Cli;
     use clap::Parser;
+    use tempfile::tempdir; // add `tempfile = "3"` to Cargo.toml dev-dependencies
 
     #[test]
     fn test_convert_md_text_to_html_basic() {
@@ -203,5 +248,78 @@ mod tests {
 
         assert_eq!(cli.content, None);
         assert_eq!(cli.output, None);
+    }
+
+    #[test]
+    fn test_render_page() {
+        // Arrange: set up a temp template directory
+        let template_dir = "tests/templates_render_page";
+        fs::create_dir_all(template_dir).unwrap();
+
+        let base_template = "base.html";
+        let template_path = format!("{}/*.html", template_dir);
+        let template_file = Path::new(template_dir).join(base_template);
+
+        // Write a minimal template file with {{ title }} and {{ content }}
+        fs::write(
+            &template_file,
+            "<html><head><title>{{ title }}</title></head><body>{{ content | safe }}</body></html>",
+        )
+        .unwrap();
+
+        // Define SitePaths (adjust to your struct fields)
+        let site_paths = SitePaths {
+            content_path: "tests/content".into(),
+            template_path,
+            base_template: base_template.into(),
+            output_path: "tests/output".into(),
+        };
+
+        let html_output = "<h1>Hello</h1><p>World</p>";
+
+        // Act
+        let rendered = render_page(&site_paths, html_output).unwrap();
+
+        // Assert
+        assert!(rendered.contains("<title>The Title</title>"));
+        assert!(rendered.contains("<h1>Hello</h1>"));
+        assert!(rendered.contains("<p>World</p>"));
+    }
+
+    #[test]
+    fn test_create_and_write_file_creates_and_writes() -> io::Result<()> {
+        // Arrange: make a temporary directory
+        let dir = tempdir()?;
+        let file_path: PathBuf = dir.path().join("nested").join("hello.txt");
+
+        let content = "Hello, world!";
+
+        // Act: write to file
+        create_and_write_file(&file_path, content)?;
+
+        // Assert: file exists
+        assert!(file_path.exists());
+
+        // Assert: contents are correct
+        let written = fs::read_to_string(&file_path)?;
+        assert_eq!(written, content);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_and_write_file_overwrites_existing() -> io::Result<()> {
+        let dir = tempdir()?;
+        let file_path: PathBuf = dir.path().join("test.txt");
+
+        // First write
+        create_and_write_file(&file_path, "first")?;
+        assert_eq!(fs::read_to_string(&file_path)?, "first");
+
+        // Second write should overwrite
+        create_and_write_file(&file_path, "second")?;
+        assert_eq!(fs::read_to_string(&file_path)?, "second");
+
+        Ok(())
     }
 }
