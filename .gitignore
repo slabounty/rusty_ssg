@@ -1,4 +1,5 @@
 /target
 /tests/templates
 /tests/output
+/tests/templates_render_page
 /output
