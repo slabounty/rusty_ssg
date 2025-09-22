@@ -1,4 +1,8 @@
 <html>
-  <head><title>{{ title }}</title></head>
+  <head>
+    <title>{{ title }}</title>
+    <meta name="author" content={{ author }}>
+    <meta name="date" content={{ date }}>
+  </head>
   <body>{{ content | safe }}</body>
 </html>

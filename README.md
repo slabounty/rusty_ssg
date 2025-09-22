@@ -109,6 +109,10 @@ cargo run -- --input content --output output
 ## Hour 9 – Add Front Matter (Optional Bonus)
 
 - Allow YAML front matter (title, date) using serde_yaml.
+    ---
+    title: My First Post
+    date: 2025-09-06
+    ---
 - Extract metadata before converting Markdown.
 - Pass title into template dynamically.
 
