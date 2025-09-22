@@ -3,21 +3,23 @@ use std::ffi::OsStr;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use anyhow::Result;
 use clap::{Parser as ClapParser};
 use log::{info};
 use env_logger::Env;
 use pulldown_cmark::{Parser, Options, html};
+use serde::Deserialize;
 use tera::{Tera, Context};
 use walkdir::WalkDir;
 
 #[derive(ClapParser)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    /// Sets a custom config file
+    // Sets a custom config file
     #[arg(short, long, value_name = "FILE")]
     content: Option<String>,
 
-    /// Sets a custom config file
+    // Sets a custom config file
     #[arg(short, long, value_name = "FILE")]
     output: Option<String>,
 }
@@ -27,6 +29,23 @@ struct SitePaths {
     template_path: String,
     output_path: String,
     base_template: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct FrontMatter {
+    title: String,
+    date: String,
+    author: String,
+}
+
+impl Default for FrontMatter {
+    fn default() -> Self {
+        FrontMatter {
+            title: "Untitled".to_string(),
+            date: "1970-01-01".to_string(),
+            author: "Unknown".to_string(),
+        }
+    }
 }
 
 fn main() {
@@ -59,19 +78,42 @@ fn convert_files(site_paths: &SitePaths) {
             e.path().extension().and_then(OsStr::to_str) == Some("md")
         })
     {
-        convert_file_to_html(site_paths, &entry.path().display().to_string());
+        let _ = convert_file_to_html(site_paths, &entry.path().display().to_string());
     }
 }
 
-fn convert_file_to_html(site_paths: &SitePaths, md_file_path: &str) {
-    let markdown_input = fs::read_to_string(md_file_path);
-    match markdown_input {
-        Ok(markdown_text) => convert_md_text_to_html(site_paths, &md_file_path, &markdown_text),
-        Err(e) => println!("Operation failed: {}", e), // std::io::Error implements Display
-    }
+fn convert_file_to_html(site_paths: &SitePaths, md_file_path: &str)  -> Result<()> {
+    let markdown_text = fs::read_to_string(md_file_path)?;
+
+    // Split into front matter and body
+    let parts: Vec<&str> = markdown_text.splitn(3, "---").collect();
+
+    let (front_matter, body) = if parts.len() == 3 {
+        (Some(parts[1].trim()), parts[2])
+    } else {
+        (None, &markdown_text[..])
+    };
+
+    // Parse YAML front matter if present
+    let metadata: FrontMatter = if let Some(fm) = front_matter {
+        serde_yaml::from_str(fm)?
+    } else {
+        FrontMatter::default()
+    };
+
+    // Now continue with your existing conversion, but pass metadata too
+    convert_md_text_to_html(site_paths, md_file_path, body, &metadata);
+
+    Ok(())
 }
 
-fn convert_md_text_to_html(site_paths: &SitePaths, md_file_path: &str, markdown_text: &str) {
+// Run time find type of an object _ in front since we're not using it
+// currently but we don't want to get rid of it.
+fn _print_type_of<T>(_: &T) {
+    println!("{}", std::any::type_name::<T>());
+}
+
+fn convert_md_text_to_html(site_paths: &SitePaths, md_file_path: &str, markdown_text: &str, fm: &FrontMatter) {
     info!("Processing: {}", md_file_path);
 
     // Set up options (e.g., enable tables, footnotes, etc.)
@@ -86,7 +128,7 @@ fn convert_md_text_to_html(site_paths: &SitePaths, md_file_path: &str, markdown_
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
 
-    let rendered_html = match render_page(&site_paths, &html_output) {
+    let rendered_html = match render_page(&site_paths, &html_output, fm) {
         Ok(html) => html,
         Err(e) => {
             panic!("Error rendering template: {}", e);
@@ -103,12 +145,14 @@ fn convert_md_text_to_html(site_paths: &SitePaths, md_file_path: &str, markdown_
 }
 
 // The function must return a Result to use the '?' operator.
-fn render_page(site_paths: &SitePaths, html_output: &str) -> Result<String, tera::Error> {
+fn render_page(site_paths: &SitePaths, html_output: &str, front_matter: &FrontMatter) -> Result<String, tera::Error> {
     let tera = Tera::new(&site_paths.template_path)?;
 
     // Create a context and add the data into it.
     let mut context = Context::new();
-    context.insert("title", "The Title");
+    context.insert("title", &front_matter.title);
+    context.insert("author", &front_matter.author);
+    context.insert("date", &front_matter.date);
     context.insert("content", &html_output);
 
     // Render the html from the template and the context.
@@ -173,8 +217,6 @@ mod tests {
 
         // Arrange: markdown input with a header and paragraph
         let md = "# Hello\n\nThis is a test.";
-        // Minimal template string to simulate Tera
-        //let template_dir = "tests/templates/*.html";
 
         let site_paths = SitePaths {
             content_path: String::from("./tests/content"),
@@ -187,20 +229,22 @@ mod tests {
         fs::create_dir_all("tests/templates").unwrap();
         fs::write("tests/templates/base.html", "<html><head><title>{{ title }}</title></head><body>{{ content | safe }}</body></html>").unwrap();
 
+        let fm = FrontMatter::default();
+
         // Act: convert
-        convert_md_text_to_html(&site_paths, &md_path, md);
+        convert_md_text_to_html(&site_paths, &md_path, md, &fm);
 
         // Assert: just check template exists, tera loads it, and HTML is generated
         // (Here we don’t capture stdout, but you could with `assert_cmd` or `duct`)
         let tera = Tera::new(&site_paths.template_path).unwrap();
         let mut ctx = Context::new();
-        ctx.insert("title", "The Title");
+        ctx.insert("title", &fm.title);
         ctx.insert("content", "<h1>Hello</h1>\n<p>This is a test.</p>\n");
         let rendered = tera.render(&site_paths.base_template, &ctx).unwrap();
 
         assert!(rendered.contains("<h1>Hello</h1>"));
         assert!(rendered.contains("<p>This is a test.</p>"));
-        assert!(rendered.contains("<title>The Title</title>"));
+        assert!(rendered.contains("<title>Untitled</title>"));
     }
 
     #[test]
@@ -216,7 +260,7 @@ mod tests {
         };
 
         // Act: function should not panic
-        convert_file_to_html(&site_paths, missing_path);
+        let _ = convert_file_to_html(&site_paths, missing_path);
 
         // Assert: nothing to assert directly, but no panic = pass
         assert!(!Path::new(missing_path).exists());
@@ -274,14 +318,15 @@ mod tests {
             base_template: base_template.into(),
             output_path: "tests/output".into(),
         };
+        let fm = FrontMatter::default();
 
         let html_output = "<h1>Hello</h1><p>World</p>";
 
         // Act
-        let rendered = render_page(&site_paths, html_output).unwrap();
+        let rendered = render_page(&site_paths, html_output, &fm).unwrap();
 
         // Assert
-        assert!(rendered.contains("<title>The Title</title>"));
+        assert!(rendered.contains("<title>Untitled</title>"));
         assert!(rendered.contains("<h1>Hello</h1>"));
         assert!(rendered.contains("<p>World</p>"));
     }
